@@ -11,37 +11,39 @@ public Plugin:myinfo =
 	url = "http://necavi.org"
 }
 
-new Handle:g_hPermissionsCache[MAXPLAYERS + 2] = {INVALID_HANDLE, ...};
+new Handle:g_hPermissionCache[MAXPLAYERS + 2] = {INVALID_HANDLE, ...};
+new Handle:g_hPermissionRegex[MAXPLAYERS + 2] = {INVALID_HANDLE, ...};
 
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
 {
 	CreateNative("AddClientPerm", Native_AddClientPerm);
 	CreateNative("RemoveClientPerm", Native_RemoveClientPerm);
 	CreateNative("ClientHasPerm", Native_ClientHasPerm);
+	for(new i = 0; i <= MAXPLAYERS; i++)
+	{
+		g_hPermissionCache[i] = CreateArray(MAX_PERMISSION_LENGTH);
+		g_hPermissionRegex[i] = CreateArray();
+	}
 	return APLRes_Success;
 }
 
-public bool:OnClientConnect(client, String:rejectmsg[], maxlen);
+public bool:OnClientConnect(client, String:rejectmsg[], maxlen)
 {
-	if(g_hPermissionsCache[client] == INVALID_HANDLE)
+
+	for(new i = 0; i < GetArraySize(g_hPermissionRegex[client]); i++)
 	{
-		g_hPermissionsCache[client] = CreateArray(MAX_PERMISSION_LENGTH * 2);
+		CloseHandle(GetArrayCell(g_hPermissionRegex[client], i));
 	}
-	else
-	{
-		ClearArray(g_hPermissionsCache[client]);
-	}
+	ClearArray(g_hPermissionRegex[client]);
+	ClearArray(g_hPermissionCache[client]);
 	return true;
 }
 
 bool:HasPermission(client, String:permission[])
 {
-	new String:node[MAX_PERMISSION_LENGTH];
-	for(new i = 0; i < GetArraySize(g_hPermissionsCache[client]); i++)
+	for(new i = 0; i < GetArraySize(g_hPermissionRegex[client]); i++)
 	{
-		GetArrayString(g_hPermissionsCache[client], i, node, sizeof(node));
-		new Handle:regex = CompileRegex(node, PCRE_CASELESS);
-		if(MatchRegex(regex, permission))
+		if(MatchRegex(GetArrayCell(g_hPermissionRegex[client], i), permission))
 		{
 			return true;
 		}
@@ -58,27 +60,32 @@ public Native_ClientHasPerm(Handle:plugin, numParams)
 
 public Native_AddClientPerm(Handle:plugin, numParams)
 {
-	
+	new client = GetNativeCell(1);
 	new String:permission[MAX_PERMISSION_LENGTH];
 	GetNativeString(2, permission, sizeof(permission));
+	PushArrayString(g_hPermissionCache[GetNativeCell(1)], permission);
 	ReplaceString(permission, MAX_PERMISSION_LENGTH * 2, ".", "\\.");
 	ReplaceString(permission, MAX_PERMISSION_LENGTH * 2, "*", "(.*)");
-	PushArrayString(g_hPermissionsCache[GetNativeCell(1)], permission);
+	PushArrayCell(g_hPermissionRegex[client], CompileRegex(permission, PCRE_CASELESS));
 }
 
 public Native_RemoveClientPerm(Handle:plugin, numParams)
 {
 	new String:permission[MAX_PERMISSION_LENGTH];
 	GetNativeString(2, permission, sizeof(permission));
-	ReplaceString(permission, MAX_PERMISSION_LENGTH * 2, ".", "\\.");
-	ReplaceString(permission, MAX_PERMISSION_LENGTH * 2, "*", "(.*)");
 	new client = GetNativeCell(1);
-	new index = FindStringInArray(g_hPermissionsCache[client], permission);
+	new index = FindStringInArray(g_hPermissionCache[client], permission);
 	if(index > 0)
 	{
-		RemoveFromArray(g_hPermissionsCache[client], index);
+		RemoveFromArray(g_hPermissionCache[client], index);
+		CloseHandle(GetArrayCell(g_hPermissionRegex[client], index));
+		RemoveFromArray(g_hPermissionRegex[client], index);
 	}
 }
+
+
+
+
 
 
 
